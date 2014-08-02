@@ -17,6 +17,7 @@
 #******************************************************************************
 
 import binascii
+import configparser
 import gnupg
 import os
 import sys
@@ -30,10 +31,116 @@ from pprint import pprint
 
 def main():
     
+    iniFilePath = "PyGpgHandler.ini"
+
     # define the temporary folder
     # that will hold the generated keys
     # and the encrypted/signature files
     tmpFolder = '~/temp'
+
+    # GPG sub-folder that will hold
+    # the generated RSA/DSA keys in a file
+    gpgTestSubFolder = 'gpgTest'
+
+    # TXT sub-folder that will
+    # hold the generated test files
+    txtTestSubFolder = 'txtTest'
+    
+    # The name of the GPG key file that
+    # will hold the generated RSA and DSA keys
+    gpgTestKeyFileName = 'gpgTestKeyFile.asc'
+
+    # North Carolina Voters files can be used as test files
+    # because they are approximate 70 columns in width and vary
+    # vary from a low of 1,000 rows to over 7,000,000 rows.
+    # The voter files can be downloaded from the following URL:
+    #   ftp://alt.ncsbe.gov/data/
+
+    # small-size
+    # srcFileName = '~/temp/Voters/NC/ncvoter48.csv'
+
+    # medium-size
+    # srcFileName = '~/temp/Voters/NC/ncvoter92.csv'
+
+    # largest-size
+    # srcFileName = '~/temp/Voters/NC/NC_Voters_StateWide.csv'
+
+    # tiny test file 
+    srcFileName = 'testFile.txt'
+
+    # define the RSA key's values    
+    rsa_keyLength = 2048
+    rsa_keyType = 'RSA'
+    rsa_keyUsage = 'sign,encrypt,auth'
+    rsa_email_address = 'gpg.rsax@mydomain.com'
+    rsa_passphrase = 'rsa passphrase'
+    
+    # ASCII-armor the
+    # encrypted or signed files?
+    rsa_ascii_armor = True
+ 
+    # define the DSA key's values 
+    dsa_keyLength = 2048
+    dsa_keyType = 'DSA'
+    dsa_keyUsage = 'sign'
+    dsa_email_address = 'gpg.dsax@mydomain.com'
+    dsa_passphrase = 'dsa passphrase'
+    
+
+    # obtain any command-line arguments
+    nextArg = ""
+    for argv in sys.argv:
+        
+        if nextArg != "":
+            if nextArg == "iniFilePath":
+                iniFilePath = argv
+            nextArg = ""
+        else:
+            if argv.lower() == "--iniFilePath":
+                nextArg = "iniFilePath"
+        
+    # expand any leading tilde
+    # to the user's home path
+    iniFilePath = os.path.abspath(os.path.expanduser(iniFilePath))
+
+    # if INI file path does not exist
+    if not os.path.exists(iniFilePath):
+        # output error message
+        sys.stderr.write('iniFilePath does not exist: "%s"\n' % iniFilePath)
+        # cease further processing
+        return
+    
+    # obtain the settings
+    # from the INI file path
+    config = configparser.ConfigParser()
+    config.optionxform = str #this will preserve the case of the section names
+    config.read(iniFilePath)
+
+    # obtain the default settings from the INI file
+    tmpFolder = config['defaults'].get('tmpFolder', tmpFolder)
+    gpgTestSubFolder = config['defaults'].get('gpgTestSubFolder', gpgTestSubFolder)
+    gpgTestKeyFileName = config['defaults'].get('gpgTestKeyFileName', gpgTestKeyFileName)
+    txtTestSubFolder = config['defaults'].get('txtTestSubFolder', txtTestSubFolder)
+
+    # obtain the source file settings from the INI file
+    srcFileName = config['srcSpecs'].get('srcFileName', srcFileName)
+    
+    # obtain RSA Specs settings from the INI file
+    rsa_keyLength = int(config['rsaSpecs'].get('rsa_keyLength', rsa_keyLength))
+    rsa_keyType = config['rsaSpecs'].get('rsa_keyType', rsa_keyType)
+    rsa_keyUsage = config['rsaSpecs'].get('rsa_keyUsage', rsa_keyUsage)
+    rsa_email_address = config['rsaSpecs'].get('rsa_email_address', rsa_email_address)
+    rsa_passphrase = config['rsaSpecs'].get('rsa_passphrase', rsa_passphrase)
+    rsa_ascii_armor = (config['rsaSpecs'].get('rsa_ascii_armor') == 'True')
+
+    # obtain DSA Specs settings from the INI file
+    dsa_keyLength = int(config['dsaSpecs'].get('dsa_keyLength', dsa_keyLength))
+    dsa_keyType = config['dsaSpecs'].get('dsa_keyType', dsa_keyType)
+    dsa_keyUsage = config['dsaSpecs'].get('dsa_keyUsage', dsa_keyUsage)
+    dsa_email_address = config['dsaSpecs'].get('dsa_email_address', dsa_email_address)
+    dsa_passphrase = config['dsaSpecs'].get('dsa_passphrase', dsa_passphrase)
+
+    # expand the temporary folder's name    
     tmpFolderExpanded = os.path.expanduser(tmpFolder)
     
     # if necessary
@@ -41,7 +148,7 @@ def main():
         # create the temporary folder
         os.makedirs(tmpFolderExpanded)
     
-    gpgTestFolder = os.path.join(tmpFolder, 'gpgTest')
+    gpgTestFolder = os.path.join(tmpFolder, gpgTestSubFolder)
     gpgTestFolderExpanded = os.path.expanduser(gpgTestFolder)
     
     # if necessary
@@ -49,23 +156,13 @@ def main():
         # create the GPG test folder
         os.makedirs(gpgTestFolderExpanded)
     
-    txtTestFolder = os.path.join(tmpFolder, 'txtTest')
+    txtTestFolder = os.path.join(tmpFolder, txtTestSubFolder)
     txtTestFolderExpanded = os.path.expanduser(txtTestFolder)
     
     # if necessary
     if not os.path.exists(txtTestFolderExpanded):
         # create the TXT test folder
         os.makedirs(txtTestFolderExpanded)
-
-    # North Carolina Voters files are used as test files
-    # because they are approximate 70 columns in width and
-    # and vary from a 1,000 to over 7,000,000 rows.
-    # The voter files can be downloaded from the following URL:
-    #   ftp://alt.ncsbe.gov/data/
-
-    srcFileName = '~/temp/Voters/NC/ncvoter48.csv' # small-size
-    # srcFileName = '~/temp/Voters/NC/ncvoter92.csv' # medium-size
-    # srcFileName = '~/temp/Voters/NC/NC_Voters_StateWide.csv' # largest-size
 
     srcFileNameExpanded = os.path.expanduser(srcFileName)
     
@@ -74,12 +171,12 @@ def main():
         sys.stderr.write("SRC file does NOT exist: %s\n" % srcFileName)
         return
         
-    # derive the GPG Test keys file name
-    gpgTestKeyFileName = 'gpgTestKeyFile.asc'
     # if a folder was not specified
     if os.path.dirname(gpgTestKeyFileName) == '':        
         # pre-pend the GPG Test folder to the GPG Test key file name
         gpgTestKeyFileName = os.path.join(gpgTestFolder, gpgTestKeyFileName)
+        
+    # derive the GPG Test keys file name
     gpgTestKeyFileNameExpanded = os.path.expanduser(gpgTestKeyFileName)
     
     # if necessary
@@ -91,30 +188,13 @@ def main():
     # derive the future encrypted-and-signed file's name
     rsaFileName = os.path.join(txtTestFolderExpanded, os.path.basename(srcFileName))
 
-    # ASCII-armor the
-    # encrypted or signed files?
-    rsaArmor = True
-    if rsaArmor:
+    if rsa_ascii_armor:
         rsaFileName += '.asc'
     else:
         rsaFileName += '.gpg'
 
     # derive the future signature file's name
     dsaFileName = rsaFileName + '.sig'
-
-    # define the RSA key's values    
-    rsa_keyLength = 2048
-    rsa_keyType = 'RSA'
-    rsa_keyUsage = 'sign,encrypt,auth'
-    rsa_email_address = 'gpg.rsax@mydomain.com'
-    rsa_passphrase = 'rsa passphrase'
- 
-    # define the DSA key's values 
-    dsa_keyLength = 2048
-    dsa_keyType = 'DSA'
-    dsa_keyUsage = 'sign'
-    dsa_email_address = 'gpg.dsax@mydomain.com'
-    dsa_passphrase = 'dsa passphrase'
 
     
     # ---------------------------------------------------------------------
@@ -235,7 +315,7 @@ def main():
                                  rsa_email_address,
                                  sign=dsa_email_address,
                                  passphrase=dsa_passphrase,
-                                 armor=rsaArmor)
+                                 armor=True)
     encrypted_string = str(encrypted_data)
 
     print ('Encrypt and sign a string')
@@ -307,7 +387,7 @@ def main():
                                   output=rsaFileName,
                                   sign=dsa_email_address,
                                   passphrase=dsa_passphrase,
-                                  armor=rsaArmor)
+                                  armor=rsa_ascii_armor)
     
     print ('Encrypt a file')
     print 'ok: ', status.ok
